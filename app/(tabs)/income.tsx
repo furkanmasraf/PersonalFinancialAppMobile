@@ -1,29 +1,101 @@
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
+import React, { useEffect, useState } from 'react';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Plus, TrendingUp, Calendar, DollarSign } from 'lucide-react-native';
 
+interface Income {
+  id: number;
+  amount: number;
+  category: string;
+  date: string;
+  description: string;
+}
+
 export default function IncomeScreen() {
-  // Mock income data
-  const incomes = [
-    { id: 1, amount: 12000, category: 'Maaş', date: '2024-01-01', description: 'Aylık maaş' },
-    { id: 2, amount: 2500, category: 'Freelance', date: '2024-01-15', description: 'Web sitesi projesi' },
-    { id: 3, amount: 500, category: 'Yatırım', date: '2024-01-20', description: 'Hisse temettüü' },
-  ];
+  const [incomes, setIncomes] = useState<Income[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  // 🔹 Backend API URL (kendi .NET API adresinle değiştir)
+  const API_URL = "https://10.0.2.2:5001/api/income"; // Android Emulator için
+  // const API_URL = "http://localhost:5000/api/income"; // iOS Simulator için
+
+  // API'den gelirleri çek
+  const fetchIncomes = () => {
+    setLoading(true);
+    fetch(API_URL)
+      .then((res) => res.json())
+      .then((data) => {
+        setIncomes(data);
+        setLoading(false);
+      })
+      .catch((err) => {
+        console.error("API Error:", err);
+        setLoading(false);
+      });
+  };
+
+  // Yeni gelir ekle (POST)
+  const addIncome = () => {
+    const newIncome = {
+      amount: 1500,
+      category: "Freelance",
+      date: new Date().toISOString(),
+      description: "Mobil uygulama geliştirme",
+    };
+
+    fetch(API_URL, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(newIncome),
+    })
+      .then((res) => {
+        if (!res.ok) throw new Error("Gelir eklenemedi!");
+        return res.json();
+      })
+      .then((data) => {
+        Alert.alert("Başarılı ✅", "Yeni gelir eklendi!");
+        setIncomes((prev) => [...prev, data]); // Ekrana yeni veriyi ekle
+      })
+      .catch((err) => {
+        console.error("POST Error:", err);
+        Alert.alert("Hata ❌", "Gelir eklenirken bir sorun oluştu.");
+      });
+  };
+
+  // Sayfa açıldığında gelirleri yükle
+  useEffect(() => {
+    fetchIncomes();
+  }, []);
 
   const totalIncome = incomes.reduce((sum, income) => sum + income.amount, 0);
 
-  const categories = [
-    { name: 'Maaş', amount: 12000, color: '#10B981' },
-    { name: 'Freelance', amount: 2500, color: '#3B82F6' },
-    { name: 'Yatırım', amount: 500, color: '#8B5CF6' },
-  ];
+  // Kategorileri hesapla (dinamik)
+  const categories = Object.values(
+    incomes.reduce((acc: any, item) => {
+      if (!acc[item.category]) {
+        acc[item.category] = { name: item.category, amount: 0, color: randomColor(item.category) };
+      }
+      acc[item.category].amount += item.amount;
+      return acc;
+    }, {})
+  );
+
+  if (loading) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <ActivityIndicator size="large" color="#10B981" style={{ marginTop: 50 }} />
+      </SafeAreaView>
+    );
+  }
 
   return (
     <SafeAreaView style={styles.container}>
       <ScrollView>
         <View style={styles.header}>
           <Text style={styles.title}>Gelirlerim</Text>
-          <TouchableOpacity style={styles.addButton}>
+          <TouchableOpacity style={styles.addButton} onPress={addIncome}>
             <Plus color="#FFFFFF" size={20} />
             <Text style={styles.addButtonText}>Ekle</Text>
           </TouchableOpacity>
@@ -41,7 +113,7 @@ export default function IncomeScreen() {
         <View style={styles.categoriesSection}>
           <Text style={styles.sectionTitle}>Kategoriler</Text>
           <View style={styles.categoriesGrid}>
-            {categories.map((category, index) => (
+            {categories.map((category: any, index: number) => (
               <View key={index} style={styles.categoryCard}>
                 <View style={[styles.categoryIndicator, { backgroundColor: category.color }]} />
                 <Text style={styles.categoryName}>{category.name}</Text>
@@ -63,7 +135,9 @@ export default function IncomeScreen() {
                 <Text style={styles.incomeDescription}>{income.description}</Text>
                 <View style={styles.incomeDate}>
                   <Calendar color="#6B7280" size={14} />
-                  <Text style={styles.incomeDateText}>{income.date}</Text>
+                  <Text style={styles.incomeDateText}>
+                    {new Date(income.date).toLocaleDateString('tr-TR')}
+                  </Text>
                 </View>
               </View>
               <Text style={styles.incomeAmount}>+₺{income.amount.toLocaleString('tr-TR')}</Text>
@@ -75,11 +149,15 @@ export default function IncomeScreen() {
   );
 }
 
+// 🔹 Basit kategori-renk eşleştirme
+function randomColor(category: string) {
+  const colors = ['#10B981', '#3B82F6', '#8B5CF6', '#F59E0B', '#EF4444'];
+  const hash = category.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
+  return colors[hash % colors.length];
+}
+
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#F9FAFB',
-  },
+  container: { flex: 1, backgroundColor: '#F9FAFB' },
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -87,11 +165,7 @@ const styles = StyleSheet.create({
     padding: 20,
     paddingBottom: 16,
   },
-  title: {
-    fontSize: 28,
-    fontWeight: '700',
-    color: '#111827',
-  },
+  title: { fontSize: 28, fontWeight: '700', color: '#111827' },
   addButton: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -100,11 +174,7 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     borderRadius: 12,
   },
-  addButtonText: {
-    color: '#FFFFFF',
-    fontWeight: '600',
-    marginLeft: 6,
-  },
+  addButtonText: { color: '#FFFFFF', fontWeight: '600', marginLeft: 6 },
   summaryCard: {
     backgroundColor: '#FFFFFF',
     margin: 20,
@@ -117,43 +187,13 @@ const styles = StyleSheet.create({
     shadowRadius: 8,
     elevation: 4,
   },
-  summaryHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 12,
-  },
-  summaryTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#374151',
-    marginLeft: 8,
-  },
-  summaryAmount: {
-    fontSize: 36,
-    fontWeight: '800',
-    color: '#10B981',
-    marginBottom: 4,
-  },
-  summarySubtext: {
-    fontSize: 14,
-    color: '#10B981',
-    fontWeight: '500',
-  },
-  categoriesSection: {
-    padding: 20,
-    paddingTop: 0,
-  },
-  sectionTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#111827',
-    marginBottom: 12,
-  },
-  categoriesGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 12,
-  },
+  summaryHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: 12 },
+  summaryTitle: { fontSize: 16, fontWeight: '600', color: '#374151', marginLeft: 8 },
+  summaryAmount: { fontSize: 36, fontWeight: '800', color: '#10B981', marginBottom: 4 },
+  summarySubtext: { fontSize: 14, color: '#10B981', fontWeight: '500' },
+  categoriesSection: { padding: 20, paddingTop: 0 },
+  sectionTitle: { fontSize: 18, fontWeight: '600', color: '#111827', marginBottom: 12 },
+  categoriesGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 12 },
   categoryCard: {
     flex: 1,
     minWidth: '30%',
@@ -166,27 +206,10 @@ const styles = StyleSheet.create({
     shadowRadius: 4,
     elevation: 2,
   },
-  categoryIndicator: {
-    width: 4,
-    height: 20,
-    borderRadius: 2,
-    marginBottom: 8,
-  },
-  categoryName: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#374151',
-    marginBottom: 4,
-  },
-  categoryAmount: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: '#111827',
-  },
-  recentSection: {
-    padding: 20,
-    paddingTop: 0,
-  },
+  categoryIndicator: { width: 4, height: 20, borderRadius: 2, marginBottom: 8 },
+  categoryName: { fontSize: 14, fontWeight: '600', color: '#374151', marginBottom: 4 },
+  categoryAmount: { fontSize: 16, fontWeight: '700', color: '#111827' },
+  recentSection: { padding: 20, paddingTop: 0 },
   incomeItem: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -209,32 +232,10 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     marginRight: 12,
   },
-  incomeDetails: {
-    flex: 1,
-  },
-  incomeCategory: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#111827',
-    marginBottom: 2,
-  },
-  incomeDescription: {
-    fontSize: 14,
-    color: '#6B7280',
-    marginBottom: 4,
-  },
-  incomeDate: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  incomeDateText: {
-    fontSize: 12,
-    color: '#6B7280',
-    marginLeft: 4,
-  },
-  incomeAmount: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: '#10B981',
-  },
+  incomeDetails: { flex: 1 },
+  incomeCategory: { fontSize: 16, fontWeight: '600', color: '#111827', marginBottom: 2 },
+  incomeDescription: { fontSize: 14, color: '#6B7280', marginBottom: 4 },
+  incomeDate: { flexDirection: 'row', alignItems: 'center' },
+  incomeDateText: { fontSize: 12, color: '#6B7280', marginLeft: 4 },
+  incomeAmount: { fontSize: 18, fontWeight: '700', color: '#10B981' },
 });
